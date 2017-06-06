@@ -28,8 +28,9 @@ from avocado import Test
 from avocado import main
 from avocado.utils import archive
 from avocado.utils import build
-from avocado.utils import process
+from avocado.utils import process, distro
 from avocado.utils.partition import Partition
+from avocado.utils.software_manager import SoftwareManager
 
 
 class Bonnie(Test):
@@ -46,10 +47,16 @@ class Bonnie(Test):
         Source:
          http://www.coker.com.au/bonnie++/experimental/bonnie++-1.03e.tgz
         """
+        fstype = self.params.get('fs', default='ext4')
+        smm = SoftwareManager()
+        if fstype == 'btrfs':
+            if distro.detect().name == 'Ubuntu':
+                if not smm.check_installed("btrfs-tools") and not \
+                        smm.install("btrfs-tools"):
+                    self.skip('btrfs-tools is needed for the test to be run')
 
         self.disk = self.params.get('disk', default=None)
-        fstype = self.params.get('fs', default='ext4')
-        self.scratch_dir = self.params.get('dir', default=self.teststmpdir)
+        self.scratch_dir = self.params.get('dir', default=self.srcdir)
         self.uid_to_use = self.params.get('uid-to-use',
                                           default=getpass.getuser())
         self.number_to_stat = self.params.get('number-to-stat', default=2048)
@@ -57,12 +64,12 @@ class Bonnie(Test):
 
         tarball = self.fetch_asset('http://www.coker.com.au/bonnie++/'
                                    'bonnie++-1.03e.tgz', expire='7d')
-        archive.extract(tarball, self.srcdir)
-        self.srcdir = os.path.join(self.srcdir,
+        archive.extract(tarball, self.teststmpdir)
+        self.source = os.path.join(self.teststmpdir,
                                    os.path.basename(tarball.split('.tgz')[0]))
-        os.chdir(self.srcdir)
+        os.chdir(self.source)
         process.run('./configure')
-        build.make(self.srcdir)
+        build.make(self.source)
 
         if self.disk is not None:
             self.part_obj = Partition(self.disk, mountpoint=self.scratch_dir)
@@ -87,7 +94,7 @@ class Bonnie(Test):
         args.append('-s %s' % self.data_size)
         args.append('-u %s' % self.uid_to_use)
 
-        cmd = ('%s/bonnie++ %s' % (self.srcdir, " ".join(args)))
+        cmd = ('%s/bonnie++ %s' % (self.source, " ".join(args)))
         if process.system(cmd, shell=True, ignore_status=True):
             self.fail("test failed")
 

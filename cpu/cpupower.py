@@ -27,6 +27,8 @@ class cpupower(Test):
 
     """
     Testing cpupower command
+
+    :avocado: tags=cpu,power,privileged
     """
     def setUp(self):
         if not os.path.exists('/sys/devices/system/cpu/cpu0/cpufreq'):
@@ -80,7 +82,7 @@ class cpupower(Test):
         :param: cpu_num is value for cpu
         """
         filename = "/sys/devices/system/cpu/cpu%s/cpufreq/%s" % (cpu_num, file)
-        return open(filename, 'r').readline().strip('\n')
+        return open(filename, 'r').readline().strip('\n').strip(' ')
 
     def get_list_governors(self):
         """

@@ -25,8 +25,9 @@ from avocado import Test
 from avocado import main
 from avocado.utils import archive
 from avocado.utils import build
-from avocado.utils import process
+from avocado.utils import process, distro
 from avocado.utils.partition import Partition
+from avocado.utils.software_manager import SoftwareManager
 
 
 class FioTest(Test):
@@ -48,13 +49,20 @@ class FioTest(Test):
         default_url = "http://brick.kernel.dk/snaps/fio-2.1.10.tar.gz"
         url = self.params.get('fio_tool_url', default=default_url)
         self.disk = self.params.get('disk', default=None)
-        self.dir = self.params.get('dir', default=self.teststmpdir)
+        self.dir = self.params.get('dir', default=self.srcdir)
         fstype = self.params.get('fs', default='ext4')
         tarball = self.fetch_asset(url)
-        archive.extract(tarball, self.srcdir)
+        archive.extract(tarball, self.teststmpdir)
         fio_version = os.path.basename(tarball.split('.tar.')[0])
-        self.srcdir = os.path.join(self.srcdir, fio_version)
-        build.make(self.srcdir)
+        self.sourcedir = os.path.join(self.teststmpdir, fio_version)
+        build.make(self.sourcedir)
+
+        smm = SoftwareManager()
+        if fstype == 'btrfs':
+            if distro.detect().name == 'Ubuntu':
+                if not smm.check_installed("btrfs-tools") and not \
+                        smm.install("btrfs-tools"):
+                    self.skip('btrfs-tools is needed for the test to be run')
 
         if self.disk is not None:
             self.part_obj = Partition(self.disk, mountpoint=self.dir)
@@ -73,7 +81,7 @@ class FioTest(Test):
         self.log.info("Test will run on %s", self.dir)
         fio_job = self.params.get('fio_job', default='fio-simple.job')
         self.fio_file = 'fiotest-image'
-        cmd = '%s/fio %s %s --filename=%s' % (self.srcdir,
+        cmd = '%s/fio %s %s --filename=%s' % (self.sourcedir,
                                               os.path.join(
                                                   self.datadir, fio_job),
                                               self.dir, self.fio_file)

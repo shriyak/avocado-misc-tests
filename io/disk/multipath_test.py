@@ -75,6 +75,10 @@ class MultipathTest(Test):
 
         # Find all details of multipath devices
         for wwid in self.wwids:
+            if wwid not in process.system_output('multipath -ll',
+                                                 ignore_status=True,
+                                                 shell=True):
+                continue
             self.mpath_dic = {}
             self.mpath_dic["wwid"] = wwid
             self.mpath_dic["name"] = multipath.get_mpath_name(wwid)
@@ -120,9 +124,6 @@ class MultipathTest(Test):
                 multipath.form_conf_mpath_file(blacklist=cmd)
                 if disk in multipath.get_paths(path_dic["wwid"]):
                     msg += "Blacklist of %s fails\n" % disk
-
-        # Need to give time for the multipath service to get stable
-        time.sleep(5)
 
         # Print errors
         if msg:

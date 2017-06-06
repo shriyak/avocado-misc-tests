@@ -36,6 +36,8 @@ class Ebizzy(Test):
     ebizzy is designed to generate a workload resembling common web application
     server workloads. It is highly threaded, has a large in-memory working set,
     and allocates and deallocates memory frequently.
+
+    :avocado: tags=cpu
     '''
 
     def setUp(self):
@@ -87,11 +89,10 @@ class Ebizzy(Test):
         usr_time = pattern.findall(results)[0]
         pattern = re.compile(r"sys (.*?) s")
         sys_time = pattern.findall(results)[0]
-
-        perf_json = {'records': records, 'real_time':
-                     real, 'user': usr_time, 'sys': sys_time}
-        output_path = os.path.join(self.outputdir, "perf.json")
-        json.dump(perf_json, open(output_path, "w"))
+        self.whiteboard = json.dumps({'records': records,
+                                      'real_time': real,
+                                      'user': usr_time,
+                                      'sys': sys_time})
 
 
 if __name__ == "__main__":

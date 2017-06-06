@@ -39,9 +39,17 @@ class ip_over_ib(Test):
         '''
         To check and install dependencies for the test
         '''
-        sm = SoftwareManager()
-        for pkg in ["openssh-clients", "gcc"]:
-            if not sm.check_installed(pkg) and not sm.install(pkg):
+        smm = SoftwareManager()
+        detected_distro = distro.detect()
+        pkgs = ["gcc"]
+        if detected_distro.name == "Ubuntu":
+            pkgs.append('openssh-client')
+        elif detected_distro.name == "SuSE":
+            pkgs.append('openssh')
+        else:
+            pkgs.append('openssh-clients')
+        for pkg in pkgs:
+            if not smm.check_installed(pkg) and not smm.install(pkg):
                 self.skip("%s package is need to test" % pkg)
         interfaces = netifaces.interfaces()
         self.IF = self.params.get("interface", default="")
@@ -53,12 +61,14 @@ class ip_over_ib(Test):
         self.to = self.params.get("timeout", default="600")
         self.IPERF_RUN = self.params.get("IPERF_RUN", default="0")
         self.NETSERVER_RUN = self.params.get("NETSERVER_RUN", default="0")
-        self.iper = os.path.join(self.srcdir, 'iperf')
-        self.netperf = os.path.join(self.srcdir, 'netperf')
-        detected_distro = distro.detect()
+        self.iper = os.path.join(self.teststmpdir, 'iperf')
+        self.netperf = os.path.join(self.teststmpdir, 'netperf')
         if detected_distro.name == "Ubuntu":
             cmd = "service ufw stop"
-        elif detected_distro.name in ['redhat', 'fedora']:
+        # FIXME: "redhat" as the distro name for RHEL is deprecated
+        # on Avocado versions >= 50.0.  This is a temporary compatibility
+        # enabler for older runners, but should be removed soon
+        elif detected_distro.name in ['rhel', 'fedora', 'redhat']:
             cmd = "systemctl stop firewalld"
         elif detected_distro.name == "SuSE":
             cmd = "rcSuSEfirewall2 stop"

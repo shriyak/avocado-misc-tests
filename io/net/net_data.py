@@ -43,11 +43,11 @@ class NetDataTest(Test):
         pkgs = ["ethtool", "net-tools"]
         detected_distro = distro.detect()
         if detected_distro.name == "Ubuntu":
-            pkgs.append('openssh-client')
+            pkgs.extend(["openssh-client", "iputils-ping"])
         elif detected_distro.name == "SuSE":
-            pkgs.append('openssh')
+            pkgs.extend(["openssh", "iputils"])
         else:
-            pkgs.append('openssh-clients')
+            pkgs.extend(["openssh-clients", "iputils"])
         for pkg in pkgs:
             if not smm.check_installed(pkg) and not smm.install(pkg):
                 self.skip("%s package is need to test" % pkg)
@@ -87,7 +87,10 @@ class NetDataTest(Test):
         '''
         msg = "ip addr show  | grep %s | grep -oE '[^ ]+$'" % self.peer
         cmd = "ssh %s %s" % (self.peer, msg)
+        errors = []
         self.peer_interface = process.system_output(cmd, shell=True).strip()
+        mtuval = process.system_output("ip link show %s" % self.interface,
+                                       shell=True).split()[4]
         for mtu in self.mtu_list:
             self.log.info("trying with mtu %s" % (mtu))
             # ping the peer machine with different maximum transfers unit sizes
@@ -100,9 +103,21 @@ class NetDataTest(Test):
             time.sleep(10)
             mtu = int(mtu) - 28
             cmd_ping = "ping -i 0.1 -c 2 -s %s %s" % (mtu, self.peer)
-            ret = process.system(cmd_ping, shell=True)
+            ret = process.system(cmd_ping, shell=True, ignore_status=True)
             if ret != 0:
-                self.fail("bigping test failed")
+                errors.append(str(int(mtu) + 28))
+            con_msg = "ifconfig %s mtu %s" % (self.interface, mtuval)
+            if process.system(con_msg, shell=True, ignore_status=True):
+                self.log.debug("setting original mtu value in host failed")
+            msg = "ssh %s \"ifconfig %s mtu %s\"" % (self.peer,
+                                                     self.peer_interface,
+                                                     mtuval)
+            if process.system(msg, shell=True, ignore_status=True):
+                self.log.debug("setting original mtu value in peer failed")
+            time.sleep(10)
+
+        if errors:
+            self.fail("bigping test failed for %s" % " ".join(errors))
 
     def testgro(self):
         '''
@@ -141,6 +156,18 @@ class NetDataTest(Test):
                 if ret != 0:
                     self.fail("lro test failed")
 
+    def interface_wait(self, cmd):
+        '''
+         Waits for the interface to come up
+        '''
+        for i in range(0, 600, 5):
+            if 'UP' or 'yes' in\
+             process.system_output(cmd, shell=True, ignore_status=True):
+                self.log.info("%s is up" % self.interface)
+                return True
+            time.sleep(5)
+        return False
+
     def testinterface(self):
         '''
          test the interface
@@ -159,18 +186,13 @@ class NetDataTest(Test):
         if 'UP' in ret:
             self.fail("interface test failed")
         # up the interface
-        process.system(if_up, shell=True)
-        # check the status of interface through ethtool
-        # Waiting for interface to come up, with a timeout
-        for i in range(0, 600, 60):
-            if 'yes' in process.system_output(self.eth, shell=True):
-                break
-            time.sleep(60)
-        if 'no' in process.system_output(self.eth, shell=True):
+        process.system(if_up, shell=True, ignore_status=True)
+        self.log.info('Checking for interface status using ip link show')
+        if not self.interface_wait(ip_link):
             self.fail("interface test failed")
-        # check the status of interface through ip link show
-        ret = process.system_output(ip_link, shell=True)
-        if 'DOWN' in ret:
+        # check the status of interface through ethtool
+        self.log.info('Checking for interface status using Ethtool')
+        if not self.interface_wait(self.eth):
             self.fail("interface test failed")
 
     def tearDown(self):
